@@ -1,5 +1,15 @@
-todo:
-fix parsing of strings so load works
-update and test stdlib
-cps?
+Barsut!
 
+A scheme implementation is Haskell, based (very much) on
+the tutorial Write Yourself a Scheme in 48 Hours by Jonathan Tang
+:: http://jonathan.tang.name/files/scheme_in_48/tutorial/overview.html ::
+
+
+
+Todos:
+autoload stdlib
+Readline/Haskeline
+Update and test stdlib
+CPSify everything!
+Add safety cluases to primitives
+Add more io stuff (print, display, etc)

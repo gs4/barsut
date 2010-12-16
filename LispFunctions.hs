@@ -12,18 +12,25 @@ import Data.IORef
 import LispTypes
 import LispParsing
 
+----------
+
+type LispFn = ([LispVal] -> ThrowsError LispVal)
+type LispIOFn = ([LispVal] -> IOThrowsError LispVal)
+
+------------
+
 isBound :: Env -> String -> IO Bool
 isBound envRef var = readIORef envRef >>= return . maybe False (const True) . lookup var
 
 getVar :: Env -> String -> IOThrowsError LispVal
 getVar envRef var = do env <- liftIO $ readIORef envRef
-                       maybe (throwError $ UnboundVarErr "Unbound variable (get)!" var)
+                       maybe (throwError $ UnboundVarErr "Unbound variable" var)
                              (liftIO . readIORef)
                              (lookup var env)
 
 setVar :: Env -> String -> LispVal -> IOThrowsError LispVal
 setVar envRef var val = do env <- liftIO $ readIORef envRef
-                           maybe (throwError $ UnboundVarErr "Unbound variable (set)!" var)
+                           maybe (throwError $ UnboundVarErr "Unbound variable" var)
                                  (liftIO . (flip writeIORef val))
                                  (lookup var env)
                            return val
@@ -58,6 +65,7 @@ makeVarargs = makeFunc . Just . show
 -------------------
 
 apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
+apply (IOFunc func) args = func args
 apply (PrimitiveFunc func) args = liftThrows $ func args
 apply (Func params varargs body closure) args =
   if num params /= num args && varargs == Nothing
@@ -136,7 +144,8 @@ primitives = [("+", numNumBinop (+)),
               ("cons", cons),
               ("eq?", eqv),
               ("eqv?", eqv),
-              ("equal?", equal)]
+              ("equal?", equal),
+              ("pair?", pair)]
              
 ioPrimitives :: [(String, [LispVal] -> IOThrowsError LispVal)]
 ioPrimitives = [("apply", applyProc),
@@ -147,60 +156,66 @@ ioPrimitives = [("apply", applyProc),
                 ("read", readProc),
                 ("write", writeProc),
                 ("read-contents", readContents),
-                ("read-all", readAll)]
+                ("read-all", readAll),
+                ("display", display)]
                
-applyProc :: [LispVal] -> IOThrowsError LispVal
+applyProc :: LispIOFn
 applyProc [func, List args] = apply func args
 applyProc (func : args) = apply func args
 
-makePort :: IOMode -> [LispVal] -> IOThrowsError LispVal
-makePort mode [String filename] = liftM Port $ liftIO $ openFile filename mode
-
-closePort :: [LispVal] -> IOThrowsError LispVal
+closePort :: LispIOFn
 closePort [Port port] = liftIO $ hClose port >> (return $ Bool True)
 closePort _ = return $ Bool False
 
-readProc :: [LispVal] -> IOThrowsError LispVal
+readProc :: LispIOFn
 readProc [] = readProc [Port stdin]
 readProc [Port port] = (liftIO $ hGetLine stdin) >>= liftThrows . readExpr
 
-writeProc :: [LispVal] -> IOThrowsError LispVal
+writeProc :: LispIOFn
 writeProc [obj] = writeProc [obj, Port stdout]
 writeProc [obj, Port port] = liftIO $ hPrint port obj >> (return $ Bool True)
 
-readContents :: [LispVal] -> IOThrowsError LispVal
+display :: LispIOFn
+display [String str] = liftIO $ putStr str >> (return $ String str)
+
+readContents :: LispIOFn
 readContents [String filename] = liftM String $ liftIO $ readFile filename
+readContents [badArg] = liftThrows $ throwError $ TypeMismatchErr "expected filename " badArg
+readContents badArgs = liftThrows $ throwError $ NumArgsErr 1 badArgs
+
+makePort :: IOMode -> LispIOFn
+makePort mode [String filename] = liftM Port $ liftIO $ openFile filename mode
+
+readAll :: LispIOFn
+readAll [String fname] = liftM List $ load fname
 
 load :: String -> IOThrowsError [LispVal]
 load filename = (liftIO $ readFile filename) >>= liftThrows . readExprList
 
-readAll :: [LispVal] -> IOThrowsError LispVal
-readAll [String fname] = liftM List $ load fname
-
 ------------
 
 
-car :: [LispVal] -> ThrowsError LispVal
+car :: LispFn
 car [List (x : xs)] = return x
 car [DottedList (x : xs) _] = return x
 car [badArg] = throwError $ TypeMismatchErr "pair" badArg
 car badArgList = throwError $ NumArgsErr 1 badArgList
 
-cdr :: [LispVal] -> ThrowsError LispVal
+cdr :: LispFn
 cdr [List (x : xs)] = return $ List xs
 cdr [DottedList [xs] x] = return x
 cdr [DottedList (_ : xs) x] = return $ DottedList xs x
 cdr [badArg] = throwError $ TypeMismatchErr "pair" badArg
 cdr badArgList = throwError $ NumArgsErr 1 badArgList
 
-cons :: [LispVal] -> ThrowsError LispVal
+cons :: LispFn
 cons [x1, List []] = return $ List [x1]
 cons [x, List xs] = return $ List $ [x] ++ xs
 cons [x, DottedList xs xlast] = return $ DottedList ([x] ++ xs) xlast
 cons [x1, x2] = return $ DottedList [x1] x2
 cons badArgList = throwError $ NumArgsErr 2 badArgList
 
-eqv :: [LispVal] -> ThrowsError LispVal
+eqv :: LispFn
 eqv [(Bool arg1), (Bool arg2)] = return $ Bool $ arg1 == arg2
 eqv [(Number arg1), (Number arg2)] = return $ Bool $ arg1 == arg2
 eqv [(String arg1), (String arg2)] = return $ Bool $ arg1 == arg2
@@ -216,6 +231,23 @@ eqv badArgList = throwError $ NumArgsErr 2 badArgList
 
 ----
 
+pair :: LispFn
+pair [(DottedList _ _)] = return $ Bool True
+pair [(List _)] = return $ Bool True
+pair _ = return $ Bool False
+
+----
+
+
+equal :: LispFn
+equal [arg1, arg2] = do
+  primitiveEquals <- liftM or $ mapM (unpackEquals arg1 arg2) 
+                     [AnyUnpacker unpackNum, AnyUnpacker unpackStr, AnyUnpacker unpackBool]
+  eqvEquals <- eqv [arg1, arg2]
+  return $ Bool $ (primitiveEquals || let (Bool x) = eqvEquals in x)
+equal badArgList = throwError $ NumArgsErr 2 badArgList
+
+----
 
 
 unpackEquals :: LispVal -> LispVal -> Unpacker -> ThrowsError Bool
@@ -224,14 +256,7 @@ unpackEquals arg1 arg2 (AnyUnpacker unpacker) =
      unpacked2 <- unpacker arg2
      return $ unpacked1 == unpacked2
  `catchError` (const $ return False)
-      
-equal :: [LispVal] -> ThrowsError LispVal      
-equal [arg1, arg2] = do
-  primitiveEquals <- liftM or $ mapM (unpackEquals arg1 arg2) 
-                     [AnyUnpacker unpackNum, AnyUnpacker unpackStr, AnyUnpacker unpackBool]
-  eqvEquals <- eqv [arg1, arg2]
-  return $ Bool $ (primitiveEquals || let (Bool x) = eqvEquals in x)
-equal badArgList = throwError $ NumArgsErr 2 badArgList
+
 
 
 boolBinop :: (LispVal -> ThrowsError a) -> (a -> a -> Bool) -> [LispVal] -> ThrowsError LispVal

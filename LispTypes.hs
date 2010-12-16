@@ -33,12 +33,13 @@ import Control.Monad.Error
 import Data.IORef
 import Text.ParserCombinators.Parsec
        
+-----
+
 type Env = IORef [(String, IORef LispVal)]
-
-
-
 type ThrowsError = Either LispError
 type IOThrowsError = ErrorT LispError IO
+
+-----
 
 data LispVal = Atom String
              | List [LispVal]

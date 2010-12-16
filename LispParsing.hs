@@ -9,11 +9,12 @@ import Control.Monad.Error
 spaces = skipMany1 space
 
 symbol :: Parser Char
-symbol = oneOf "!$%&|*+-/:<=>?@^_~."
+symbol = oneOf "!$#%&|*+-/:<=>?@^_~."
 
 parseString :: Parser LispVal
 parseString = do char '"'
                  x <- many (noneOf "\"")
+                 char '"'
                  return $ String x
                  
 parseAtom :: Parser LispVal

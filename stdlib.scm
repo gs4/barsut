@@ -3,7 +3,7 @@
 (define (list . objs) objs)
 (define (id obj) obj)
 (define (flip func) (lambda (arg1 arg2) (func arg2 arg1)))
-(define (curry func arg1) (lambda (arg) (apply func (cons arg1 arg))))
+(define (curry func arg1) (lambda args (apply func (cons arg1 args))))
 (define (compose f g) (lambda (arg) (f (apply g arg))))
 (define zero? (curry = 0))
 (define positive? (curry < 0))

@@ -34,7 +34,10 @@ runOne args = do
     >>= hPutStrLn stderr
 
 runRepl :: IO ()
-runRepl = primitiveBindings >>= until_ (== ":q") (readPrompt "Barsut>>> ") . evalAndPrint
+runRepl = primitiveBindings >>= stdlib >>= until_ (== ":q") (readPrompt "Barsut>>> ") . evalAndPrint
+
+stdlib :: Env -> IO Env
+stdlib env = evalAndPrint env "(load \"stdlib.scm\")" >> return env
 
 main = do args <- getArgs
           case length args of
