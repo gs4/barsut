@@ -176,7 +176,7 @@ writeProc [obj] = writeProc [obj, Port stdout]
 writeProc [obj, Port port] = liftIO $ hPrint port obj >> (return $ Bool True)
 
 display :: LispIOFn
-display [String str] = liftIO $ putStr str >> (return $ String str)
+display [String str] = writeProc [String str, Port stdout]
 
 readContents :: LispIOFn
 readContents [String filename] = liftM String $ liftIO $ readFile filename

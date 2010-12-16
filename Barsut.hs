@@ -3,29 +3,26 @@ module Main where
 import System.Environment
 import System.IO
 import Monad
+import System.Console.Readline
 
 import LispTypes
 import LispParsing
 import LispFunctions
 
-flushStr :: String -> IO ()           
-flushStr str = putStr str >> hFlush stdout
-
-readPrompt :: String -> IO String
-readPrompt prompt = flushStr prompt >> getLine
+readPrompt :: String -> IO (Maybe String)
+readPrompt prompt = 
+  do maybeLine <- readline prompt
+     case maybeLine of
+       Nothing -> return Nothing
+       Just line -> do addHistory line
+                       return $ Just line
+       
 
 evalStr :: Env -> String -> IO String
 evalStr env expr = runIOThrows $ liftM show $ (liftThrows $ readExpr expr) >>= eval env
            
 evalAndPrint :: Env -> String -> IO ()
 evalAndPrint env expr = evalStr env expr >>= putStrLn
-
-until_ :: Monad m => (a -> Bool) -> m a -> (a -> m ()) -> m ()
-until_ pred prompt action = do 
-  result <- prompt
-  if pred result
-    then return ()
-    else action result >> until_ pred prompt action
 
 runOne :: [String] -> IO ()
 runOne args = do
@@ -34,7 +31,16 @@ runOne args = do
     >>= hPutStrLn stderr
 
 runRepl :: IO ()
-runRepl = primitiveBindings >>= stdlib >>= until_ (== ":q") (readPrompt "Barsut>>> ") . evalAndPrint
+runRepl = primitiveBindings >>= stdlib >>= replLoop
+  where replLoop env = do        
+          input <- readPrompt "Barsut %> "
+          case input of
+            Nothing -> putStrLn "bye!" >> return ()
+            Just "" -> replLoop env
+            Just line -> do evalAndPrint env line
+                            replLoop env
+
+
 
 stdlib :: Env -> IO Env
 stdlib env = evalAndPrint env "(load \"stdlib.scm\")" >> return env

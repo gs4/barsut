@@ -7,9 +7,6 @@ the tutorial Write Yourself a Scheme in 48 Hours by Jonathan Tang
 
 
 Todos:
-autoload stdlib
-Readline/Haskeline
-Update and test stdlib
 CPSify everything!
-Add safety cluases to primitives
+Add safety clauses to primitives
 Add more io stuff (print, display, etc)
