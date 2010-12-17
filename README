@@ -10,3 +10,11 @@ Todos:
 CPSify everything!
 Add safety clauses to primitives
 Add more io stuff (print, display, etc)
+
+Stuff added:
+begin fn
+pair? fn
+display fn
+readline support for repl
+modularizing the code
+fixed curry in stdlib

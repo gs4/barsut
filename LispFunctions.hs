@@ -65,8 +65,8 @@ makeVarargs = makeFunc . Just . show
 -------------------
 
 apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
-apply (IOFunc func) args = func args
-apply (PrimitiveFunc func) args = liftThrows $ func args
+apply (IOFunc func) args = (func args) 
+apply (PrimitiveFunc func) args  = (liftThrows $ func args)
 apply (Func params varargs body closure) args =
   if num params /= num args && varargs == Nothing
     then throwError $ NumArgsErr (num params) args
@@ -74,46 +74,51 @@ apply (Func params varargs body closure) args =
  where         
    remainingArgs = drop (length params) args
    num = toInteger . length
-   evalBody env = liftM last $ mapM (eval env) body
+   evalBody env = liftM last $ mapM (eval env idCont) body --todo sorta
    bindVarArgs arg env = case arg of
      Just argName -> liftIO $ bindVars env [(argName, List $ remainingArgs)]
      Nothing -> return env
-apply badArg args = throwError $ NotFunctionErr "tried to apply a nonfunction" $ (show badArg) ++ " applied to [" ++ (unwords $ map show args) ++ "]"
+apply badArg args = throwError $ NotFunctionErr "tried to apply nonfunction" $ (show badArg) ++ " applied to [" ++ (unwords $ map show args) ++ "]"
 
 -----
 
-eval :: Env -> LispVal -> IOThrowsError LispVal
-eval env val@(String _) = return val
-eval env val@(Number _) = return val
-eval env val@(Bool _) = return val
-eval env (Atom id) = getVar env id
-eval env (List [Atom "load", String fname]) =
-  load fname >>= liftM last . mapM (eval env)
-eval env (List [Atom "quote", val]) = return val
-eval env (List [Atom "if", pred, conseq, alt]) =
-  do result <- eval env pred
-     case result of
-       Bool False -> eval env alt
-       otherwise -> eval env conseq
-eval env (List [Atom "set!", Atom var, form]) =       
-  eval env form >>= setVar env var
-eval env (List [Atom "define", Atom var, form]) =       
-  eval env form >>= defineVar env var
-eval env (List (Atom "define" : List (Atom var : params) : body)) =
-  makeNormalFunc env params body >>= defineVar env var
-eval env (List (Atom "define" : DottedList (Atom var : params) varargs : body)) =
-  makeVarargs varargs env params body >>= defineVar env var
-eval env (List (Atom "lambda" : List params : body)) =
-  makeNormalFunc env params body
-eval env (List (Atom "lambda" : DottedList params varargs : body)) =
-  makeVarargs varargs env params body
-eval env (List (Atom "lambda" : varargs@(Atom _) : body)) =
-  makeVarargs varargs env [] body
-eval env (List (function : args)) = do 
-  func <- eval env function
-  argVals <- mapM (eval env) args
-  apply func argVals
-eval env badForm = throwError $ BadSpecialFormErr "Uncrecoginized special form" badForm
+ifcont truef falsef cont env = 
+  \val -> case val of
+    Bool False -> eval env cont falsef
+    otherwise  -> eval env cont truef
+
+eval :: Env -> Continuation -> LispVal -> IOThrowsError LispVal
+eval env cont val@(String _) = cont val
+eval env cont val@(Number _) = cont val
+eval env cont val@(Bool _) = cont val
+eval env cont (Atom id) = getVar env id >>= cont
+eval env cont (List [Atom "quote", val]) = cont val
+eval env cont (List [Atom "load", String fname]) =
+  load fname >>= liftM last . mapM (eval env cont) >>= cont -- load might as well be atomic
+eval env cont (List [Atom "if", pred, conseq, alt]) =
+  eval env (ifcont conseq alt cont env) pred 
+eval env cont (List [Atom "set!", Atom var, form]) =       
+  eval env cont form >>= setVar env var >>= cont
+eval env cont (List [Atom "define", Atom var, form]) =       
+  eval env cont form >>= defineVar env var >>= cont
+eval env cont (List (Atom "define" : List (Atom var : params) : body)) =
+  makeNormalFunc env params body >>= defineVar env var >>= cont
+eval env cont (List (Atom "define" : DottedList (Atom var : params) varargs : body)) =
+  makeVarargs varargs env params body >>= defineVar env var >>= cont
+eval env cont (List (Atom "lambda" : List params : body)) =
+  makeNormalFunc env params body >>= cont
+eval env cont (List (Atom "lambda" : DottedList params varargs : body)) =
+  makeVarargs varargs env params body >>= cont
+eval env cont (List (Atom "lambda" : varargs@(Atom _) : body)) =
+  makeVarargs varargs env [] body >>= cont
+eval env cont (List (fn : args)) = 
+  eval env (fn_cont args []) fn  
+    where fn_cont :: [LispVal] -> [LispVal] -> LispVal -> IOThrowsError LispVal 
+          fn_cont [] accum = \val -> let func = head accum
+                                         args = (tail accum) ++ [val]
+                                     in apply func args >>= cont
+          fn_cont (x:xs) accum = \val -> eval env (fn_cont xs (accum ++ [val])) x
+eval env _ badForm = throwError $ BadSpecialFormErr "Uncrecoginized special form" badForm
 
 -------------------
 
@@ -145,7 +150,8 @@ primitives = [("+", numNumBinop (+)),
               ("eq?", eqv),
               ("eqv?", eqv),
               ("equal?", equal),
-              ("pair?", pair)]
+              ("pair?", pair),
+              ("list-ref", listRef)]
              
 ioPrimitives :: [(String, [LispVal] -> IOThrowsError LispVal)]
 ioPrimitives = [("apply", applyProc),
@@ -194,6 +200,12 @@ load filename = (liftIO $ readFile filename) >>= liftThrows . readExprList
 
 ------------
 
+listRef :: LispFn
+listRef [Number idx, List lst] = if fromIntegral idx < length lst
+                                 then return $ lst !! fromIntegral idx
+                                 else throwError $ DefaultErr "list index out of bounds"
+listRef [badArg, badArg2] = throwError $ TypeMismatchErr "int, pair" $ List [badArg, badArg2]
+listRef badArgList = throwError $ NumArgsErr 2 badArgList
 
 car :: LispFn
 car [List (x : xs)] = return x

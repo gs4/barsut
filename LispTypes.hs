@@ -21,6 +21,8 @@ module LispTypes (Unpacker (AnyUnpacker),
                   Env,
                   ThrowsError,
                   IOThrowsError,
+                  Continuation,
+                  idCont,
                   trapError,
                   extractValue,
                   liftThrows,
@@ -38,6 +40,8 @@ import Text.ParserCombinators.Parsec
 type Env = IORef [(String, IORef LispVal)]
 type ThrowsError = Either LispError
 type IOThrowsError = ErrorT LispError IO
+type Continuation = LispVal -> IOThrowsError LispVal
+
 
 -----
 
@@ -68,8 +72,13 @@ data LispError = NumArgsErr Integer [LispVal]
 data Unpacker = forall a. Eq a => AnyUnpacker (LispVal -> ThrowsError a)
 
 
+
 -------------
 
+idCont :: Continuation
+idCont val = return val
+
+-------------
 
 showVal :: LispVal -> String  
 showVal (String conts) = "\"" ++ conts ++ "\""

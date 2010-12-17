@@ -32,7 +32,7 @@
   (fold (lambda (old new) (if (> old new) old new)) first num-list))
 (define (min first . num-list)
   (fold (lambda (old new) (if (< old new) old new)) first num-list))
-(define (length lst) (fold (lambda (acc y) (+ acc 1) 0 lst)))
+(define (length lst) (fold (lambda (acc y) (+ acc 1)) 0 lst))
 (define (reverse lst) (fold (flip cons) '() lst))
 (define (mem-helper pred op) (lambda (acc next) (if (and (not acc) (pred (op next))) next acc)))
 (define (memq obj lst) (fold (mem-helper (curry eq? obj) id) #f lst))
@@ -43,3 +43,5 @@
 (define (assoc obj alist)    (fold (mem-helper (curry equal? obj) car) #f alist))
 (define (map func lst)      (foldr (lambda (x y) (cons (func x) y)) '() lst))
 (define (filter pred lst)   (foldr (lambda (x y) (if (pred x) (cons x y) y)) '() lst))
+(define (begin . lst) (list-ref (- (length lst) 1) lst))
+

@@ -19,7 +19,7 @@ readPrompt prompt =
        
 
 evalStr :: Env -> String -> IO String
-evalStr env expr = runIOThrows $ liftM show $ (liftThrows $ readExpr expr) >>= eval env
+evalStr env expr = runIOThrows $ liftM show $ (liftThrows $ readExpr expr) >>= eval env idCont
            
 evalAndPrint :: Env -> String -> IO ()
 evalAndPrint env expr = evalStr env expr >>= putStrLn
@@ -27,7 +27,7 @@ evalAndPrint env expr = evalStr env expr >>= putStrLn
 runOne :: [String] -> IO ()
 runOne args = do
   env <- primitiveBindings >>= flip bindVars [("args", List $ map String $ drop 1 args)]
-  (runIOThrows $ liftM show $ eval env (List [Atom "load", String (args !! 0)])) 
+  (runIOThrows $ liftM show $ eval env idCont (List [Atom "load", String (args !! 0)])) 
     >>= hPutStrLn stderr
 
 runRepl :: IO ()
