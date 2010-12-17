@@ -4,12 +4,22 @@ A scheme implementation is Haskell, based (very much) on
 the tutorial Write Yourself a Scheme in 48 Hours by Jonathan Tang
 :: http://jonathan.tang.name/files/scheme_in_48/tutorial/overview.html ::
 
+Build:
+  -- requires ghc
+
+Usage:
+  -- ./Barsut
+  -- ./Barsut <file.scm> might work too but isn't tested (and bear in mind we only support a subset of scheme!)
+
+Things not supported that you might expect:
+  -- cond (just if, sorry)
+  -- let (just nested defines...)
+
 
 
 Todos:
-CPSify everything!
 Add safety clauses to primitives
-Add more io stuff (print, display, etc)
+  -- some errors are handled, others will crash the repl
 
 Stuff added:
 begin fn
@@ -18,3 +28,7 @@ display fn
 readline support for repl
 modularizing the code
 fixed curry in stdlib
+made eval cps style
+  -- apply doesn't keep the same continuation stack though when it evals a function body
+  -- didn't get around to call/cc :(
+
